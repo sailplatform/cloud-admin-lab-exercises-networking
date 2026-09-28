@@ -4,7 +4,7 @@
 # ============================================================================
 #  Provisions TWO virtual networks, each with one VM:
 #    vnet-a (10.10.0.0/16) -> vm-a  (your jump box into the network; SSH open)
-#    vnet-b (10.20.0.0/16) -> vm-b  (runs nginx; no public IP, no NSG)
+#    vnet-b (10.20.0.0/16) -> vm-b  (tiny web server; no public IP, no NSG)
 #  The two VNets are isolated by default. You will peer them so vm-a can reach
 #  vm-b over its PRIVATE IP. TWO real, billable VMs. Re-runnable.
 # ============================================================================
@@ -54,14 +54,30 @@ if ! az vm show -g "$RG" -n vm-b >/dev/null 2>&1; then
   CLOUDINIT="$(mktemp)"
   cat > "$CLOUDINIT" <<'EOF'
 #cloud-config
-package_update: true
-packages:
-  - nginx
+# vm-b has no public IP, and Azure retired default outbound access (2025-09-30),
+# so it has no path to the internet to install packages. We serve the page with
+# Python's built-in http.server (already on the image) via a small systemd unit,
+# so no internet is required.
+write_files:
+  - path: /opt/web/index.html
+    content: |
+      Hello from vm-b, reached over the peering
+  - path: /etc/systemd/system/labweb.service
+    content: |
+      [Unit]
+      Description=Lab web server (no internet needed)
+      After=network.target
+      [Service]
+      WorkingDirectory=/opt/web
+      ExecStart=/usr/bin/python3 -m http.server 80
+      Restart=always
+      [Install]
+      WantedBy=multi-user.target
 runcmd:
-  - [ bash, -c, "echo 'Hello from vm-b, reached over the peering' > /var/www/html/index.html" ]
-  - [ systemctl, enable, --now, nginx ]
+  - [ systemctl, daemon-reload ]
+  - [ systemctl, enable, --now, labweb ]
 EOF
-  echo "  Provisioning vm-b in vnet-b (nginx, no public IP)... ~1 min."
+  echo "  Provisioning vm-b in vnet-b (tiny web server, no public IP)... ~1 min."
   az vm create -g "$RG" -n vm-b --image "$LAB_VM_IMAGE" --size "$LAB_VM_SIZE" \
     --vnet-name vnet-b --subnet main --nsg "" --public-ip-address "" \
     --admin-username "$LAB_VM_ADMIN" --generate-ssh-keys \

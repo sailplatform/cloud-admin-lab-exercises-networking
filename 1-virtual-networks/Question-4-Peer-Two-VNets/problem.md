@@ -8,7 +8,7 @@ cannot reach a VM in the other, even over private IPs. The teams now need to tal
 As the cloud administrator, connect the two networks with **VNet peering**.
 
 `setup.bash` provisions both VNets and a VM in each: `vm-a` (with SSH open, your way
-in) and `vm-b` (running nginx, private IP only).
+in) and `vm-b` (running a small web server, private IP only).
 
 ## The idea
 
